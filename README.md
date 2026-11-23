@@ -10,7 +10,7 @@ Competition page: https://make.fun/bounty/news-image-20261123
 
 ## What it is
 
-One 1024×1024 PNG (`entry.png`, via `main.py`) summing up the world news of
+One 1024×1024 PNG (`entry.png`, via `main.ts`) summing up the world news of
 Monday 23 November 2026: **17 stories, all first reported / landed on 23 Nov
 2026 WIB**, led by the collapse of the COP31 climate talks. The image is a
 newspaper front page, not a plain list: a lead panel with a cracked-globe
@@ -29,16 +29,18 @@ rather than carried as a lone item.
 
 - `stories.json` — the 17 verified stories (headline, detail, source,
   first-report time) plus the date-check list.
-- `main.py` — the entry program (Python 3, Pillow only, no network). It
-  reads `stories.json`, draws `entry.png` deterministically from it, and
-  writes it to `MAKEFUN_OUTPUT_DIR/entry.png` (default `./output`),
-  creating the output directory first. Every run writes identical bytes.
+- `main.ts` — the entry program (Node 22, standard library only: no
+  packages, no font files, no network). It reads `stories.json`, draws
+  `entry.png` deterministically from it (raw RGBA pixel buffer + hand-rolled
+  5×7 bitmap font embedded in the source + manual PNG encoder), and writes
+  it to `MAKEFUN_OUTPUT_DIR/entry.png` (default `./output`), creating the
+  output directory first. Every run writes identical bytes.
 
 ## Run
 
 ```sh
-python3 main.py
-# or: MAKEFUN_OUTPUT_DIR=/output python3 main.py
+node main.ts
+# or: MAKEFUN_OUTPUT_DIR=/output node main.ts
 ```
 
 ## Sources
