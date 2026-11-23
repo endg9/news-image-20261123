@@ -478,8 +478,12 @@ function main(): void {
   cv.hline(MX, 76, CW, INK, 2);
 
   // ---- lead panel (navy) ----
+  // leadH 97 (was 92): the extra 5px funds the clearance below the
+  // headline so the detail line never crowds the last headline line.
+  // (Kept to +5: the page bottom has only 5px of slack in v5, so a
+  // taller panel must be paid for below — see the DATE CHECK gap.)
   const leadY = 84;
-  const leadH = 92;
+  const leadH = 97;
   cv.fillRect(MX, leadY, CW, leadH, NAVY);
   drawGlobe(cv, MX + 66, leadY + 42, 32);
   // NO DEAL tag under the globe.
@@ -493,6 +497,10 @@ function main(): void {
     cv.text(ln, lx, ly, 3, 3, WHITE);
     ly += 22;
   }
+  // Clearance between the last headline line and the first detail line:
+  // headline ink ends 1px above the detail in v5; 5px of leading here
+  // leaves a 6px blank gap (funded by the taller lead panel above).
+  ly += 5;
   const leadDet = wrap(data.lead.detail, lw, B_XS);
   for (const ln of leadDet) {
     cv.text(ln, lx, ly, B_XS, B_YS, [220, 230, 235]);
@@ -522,6 +530,10 @@ function main(): void {
   const leftEnd = y - 3;
 
   // RIGHT: ECONOMY (10–12) then TECH band + stories (13–14).
+  // Right-column stories are spread out (40px gaps vs 3px on the left)
+  // so the column ends level with the left column instead of ~190px
+  // above the SPORT band (measured last-ink-row to band: ~44px).
+  const RIGHT_STORY_GAP = 40;
   let y2 = bodyY;
   let m = 10;
   for (const s of economy.stories) {
@@ -531,7 +543,7 @@ function main(): void {
     if (s.chart) {
       drawChart(cv, s.chart, COL2X + COLW - 220, y2 + 2, 220, economy.color, m === 11);
     }
-    y2 = end + 3;
+    y2 = end + RIGHT_STORY_GAP;
     m++;
   }
   const techBandY = y2 + 2;
@@ -539,7 +551,7 @@ function main(): void {
   y2 = techBandY + 26 + 8;
   for (const s of tech.stories) {
     const end = drawStory(cv, s, COL2X, y2, String(m).padStart(2, "0"), tech.color, 0);
-    y2 = end + 3;
+    y2 = end + RIGHT_STORY_GAP;
     m++;
   }
   const rightEnd = y2 - 3;
@@ -555,7 +567,12 @@ function main(): void {
     const cx0 = MX + i * cellW;
     if (i > 0) cv.vline(cx0 - 8, cellTop, 84, DIVIDER, 1);
     const scoreW = textWidth(s.score ?? "", 4);
-    const headW = cellW - 24 - scoreW - 10;
+    // Fixed 130px numeral zone at the cell's right: the headline wraps
+    // only within the remaining width, so no headline glyph can ever
+    // reach the big score (min ink gap 31px: widest score "51–30" is
+    // 116px, leaving 14px of zone + its own left bearing).
+    const SCORE_ZONE = 130;
+    const headW = cellW - 24 - SCORE_ZONE;
     const hLines = wrap(s.headline, headW, H_XS);
     let sy = cellTop;
     for (const ln of hLines) {
@@ -574,7 +591,9 @@ function main(): void {
   cy = cellTop + 84;
 
   // ---- DATE CHECK box (amber outline) ----
-  const dcY = cy + 8;
+  // Gap 5px (was 8px): pays for 3 of the 5px the taller lead panel
+  // added, keeping the footer inside the 1024px page.
+  const dcY = cy + 5;
   const dcInner = "DATE CHECK — deliberately left out (not 23 Nov): " +
     data.date_check.join(" • ");
   const dcXs = 1.25; // fine print: narrower so all 12 items fit in 4 lines
