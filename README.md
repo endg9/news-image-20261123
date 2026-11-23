@@ -11,21 +11,23 @@ Competition page: https://make.fun/bounty/news-image-20261123
 ## What it is
 
 One 1024×1024 PNG (`entry.png`, via `main.py`) summing up the world news of
-Monday 23 November 2026: **16 stories, all first reported / landed on 23 Nov
+Monday 23 November 2026: **18 stories, all first reported / landed on 23 Nov
 2026 WIB**, led by the collapse of the COP31 climate talks. The image is a
 newspaper front page, not a plain list: a lead panel with a cracked-globe
-graphic, colour-coded section bands (World / Economy / Sport / Travel) with
-icons, numbered stories, big score numerals for the sports results, a mini
-bar chart for the flash PMI readings, and a **DATE CHECK** box naming the
-stale candidates deliberately left out (India's 720/9 Wellington record —
-22 Nov; UN killer-robot talks deal — 21 Nov; "El Chapo Isidro" captured —
-21 Nov; Russian ship on fire off Finland — 22 Nov; South Korea minister
-quits — 22 Nov; Indonesia factory fire — 21–22 Nov; JEE Main Session 1
-registration — closed 22 Nov 23:50, not 23 Nov).
+graphic and a NO DEAL tag, colour-coded section bands (World / Economy /
+Tech / Sport) with numbers, big score numerals for the sports results, a
+mini bar chart for the flash PMI readings, a second mini chart for Monday's
+market rebound (Nasdaq futures +3.0%, S&P +2.0%, gold +2.1%), and a
+**DATE CHECK** box naming the stale candidates deliberately left out.
+
+Sport is 3 of 18 stories (17%): Cowboys 51–30 Titans, Liverpool 4–0 Man Utd,
+India–NZ Test draw. The two Trump–Iran items are merged into one story.
+Travel has no section in this version: the US flights snarl was dropped
+rather than carried as a lone item.
 
 ## How it was built
 
-- `stories.json` — the 16 verified stories (headline, detail, source,
+- `stories.json` — the 18 verified stories (headline, detail, source,
   first-report time) plus the date-check list.
 - `main.py` — the entry program (Python 3, Pillow only, no network). It
   reads `stories.json`, draws `entry.png` deterministically from it, and
@@ -41,13 +43,23 @@ python3 main.py
 
 ## Sources
 
-Reuters, CNN, Fox News, S&P Global, Cricbuzz, The Hindu BusinessLine,
-Sportradar. First-report times checked live per story; see `stories.json`.
-Corrections applied in this v2 rebuild: the JEE Main story was dropped
-(registration closed 22 Nov, not 23 Nov); the Jets–Chargers report now
-reads correctly (Jets never trailed; Chargers chased late); the flash PMI
-figures are the released actuals (eurozone mfg 52.9, services 51.2;
-Germany 55.0 / 54.0; UK 52.7 / 52.0), not the pre-release consensus.
+Reuters, CNN, AP, Fox News, S&P Global, Cricbuzz, The Hindu BusinessLine,
+CBS, ECB. First-report times checked live per story; see `stories.json`.
+
+Corrections and choices in this v3 rebuild: the flash PMI figures are the
+released actuals (eurozone mfg 52.9, services 51.2; Germany 55.0 / 54.0;
+UK 52.7 / 52.0), not the pre-release consensus. The US flash PMI is NOT
+printed: it releases 21:45 WIB, after this build, and a "due" line would
+read stale at judging time. New stories verified live for 23 Nov: Democrats
+clinch 258 House seats (AP), Russia fires 153 drones at Ukraine overnight,
+boy aged 7 pulled alive in Dymer (BBC), Bangladesh vows to jail Hasina if
+she returns (Reuters), futures bounce as Asia halts the AI rout (Reuters),
+Libya oil output down 365,000 bpd (Reuters/NOC), TD sees 3 straight Fed
+hikes from December, Bessent presses Nvidia on China chips (CBS), ECB
+clears DLT assets as collateral. Excluded as not 23 Nov: ICJ
+Myanmar–Rohingya ruling (19 Nov), Riemann proof (posted 20 Nov, certified
+21 Nov), pig-kidney 1-year record (NYT 22 Nov), Seattle jet-bridge ICE
+arrests (21–22 Nov).
 
 ## License
 

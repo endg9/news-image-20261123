@@ -1,102 +1,63 @@
 #!/usr/bin/env python3
-"""news-image-20261123 v2 — 'THE WORLD IN ONE DAY'.
+"""THE WORLD IN ONE DAY — 23 November 2026 (v3).
 
-Draws a 1024x1024 newspaper front page for Monday 23 November 2026 from
-the story data embedded below. No network, no timestamps, no randomness:
-every run writes byte-identical PNG output.
+Reads stories.json next to this script and draws one deterministic
+1024x1024 PNG newspaper front page. Pillow only, no network, no clock,
+no randomness: identical input bytes give identical output bytes.
 
-Run:  python3 main.py
-      MAKEFUN_OUTPUT_DIR=/output python3 main.py
+Output: $MAKEFUN_OUTPUT_DIR/entry.png, else <script dir>/output/entry.png.
 """
-
 import json
 import os
-from pathlib import Path
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1024, 1024
-M = 32                      # side margin
-CW = W - 2 * M              # content width (960)
-
-NAVY = (16, 38, 63)
-RED = (180, 35, 24)
-PAPER = (245, 241, 230)
-CARD = (255, 255, 255)
-INK = (18, 18, 18)
-GREY = (90, 90, 90)
-FAINT = (210, 205, 190)
-AMBER_BG = (255, 243, 214)
-AMBER_EDGE = (190, 150, 40)
-
-# ---------------------------------------------------------------- data
-# (story data lives in stories.json next to this file; the same data is
-# embedded here so the program is self-contained at grading time.)
-DATA = json.loads(Path(__file__).with_name("stories.json").read_text())
+MARGIN = 24
 
 # ---------------------------------------------------------------- fonts
-_CANDIDATES = [
-    ("bold", [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-    ]),
-    ("regular", [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-    ]),
-    ("serif_bold", [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSerif-Bold.ttf",
-    ]),
-]
+def _font(name, size):
+    bases = [
+        "/usr/share/fonts/truetype/dejavu/",
+        "/usr/share/fonts/truetype/liberation/",
+        "/usr/share/fonts/truetype/noto/",
+    ]
+    for b in bases:
+        p = os.path.join(b, name)
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size)
+    return ImageFont.load_default(size)
 
 
-def _pick(kind):
-    for path in dict(_CANDIDATES)[kind]:
-        if Path(path).is_file():
-            return path
-    return None
+F_TITLE = _font("DejaVuSerif-Bold.ttf", 46)
+F_SUB = _font("DejaVuSans.ttf", 15)
+F_LEAD_H = _font("DejaVuSans-Bold.ttf", 25)
+F_LEAD_D = _font("DejaVuSans.ttf", 14)
+F_LEAD_S = _font("DejaVuSans-Bold.ttf", 11)
+F_SEC = _font("DejaVuSans-Bold.ttf", 15)
+F_NUM = _font("DejaVuSans-Bold.ttf", 13)
+F_HEAD = _font("DejaVuSans-Bold.ttf", 15)
+F_DET = _font("DejaVuSans.ttf", 12)
+F_SRC = _font("DejaVuSans.ttf", 10)
+F_SCORE = _font("DejaVuSans-Bold.ttf", 26)
+F_CHART_L = _font("DejaVuSans-Bold.ttf", 10)
+F_CHART_V = _font("DejaVuSans.ttf", 10)
+F_DC_H = _font("DejaVuSans-Bold.ttf", 12)
+F_DC = _font("DejaVuSans.ttf", 11)
+F_FOOT = _font("DejaVuSans.ttf", 10)
+
+INK = (18, 18, 18)
+MUTED = (90, 90, 90)
+RULE = (200, 200, 200)
 
 
-FONTS = {k: _pick(k) for k, _ in _CANDIDATES}
-
-
-def font(kind, size):
-    p = FONTS.get(kind)
-    if p:
-        return ImageFont.truetype(p, size)
-    return ImageFont.load_default(size=size)
-
-
-def text_w(f, s):
-    return f.getbbox(s)[2] if hasattr(f, "getbbox") else f.getlength(s)
-
-
-def fit_font(kind, size, max_w, text, min_size=10):
-    """Largest font size <= size whose rendering of text fits max_w."""
-    s = size
-    while s > min_size:
-        f = font(kind, s)
-        if text_w(f, text) <= max_w:
-            return f
-        s -= 1
-    return font(kind, min_size)
-
-
-def draw_fit(d, xy, text, kind, size, max_w, fill, min_size=10):
-    f = fit_font(kind, size, max_w, text, min_size)
-    d.text(xy, text, font=f, fill=fill)
-    return f
-
-
-def wrap_lines(text, f, max_w):
-    words, lines, cur = text.split(), [], ""
-    for word in words:
+def wrap(draw, text, font, width):
+    """Greedy word wrap; returns list of lines, each fitting `width`."""
+    lines, cur = [], ""
+    for word in text.split():
         trial = (cur + " " + word).strip()
-        if text_w(f, trial) <= max_w or not cur:
+        if draw.textlength(trial, font=font) <= width or not cur:
             cur = trial
         else:
             lines.append(cur)
@@ -106,187 +67,206 @@ def wrap_lines(text, f, max_w):
     return lines
 
 
-# ---------------------------------------------------------------- icons
-def icon_globe(d, cx, cy, r, color):
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=2)
-    d.ellipse([cx - r * 0.45, cy - r, cx + r * 0.45, cy + r], outline=color, width=1)
-    d.line([cx - r, cy, cx + r, cy], fill=color, width=1)
-    d.arc([cx - r, cy - r * 0.55, cx + r, cy + r * 0.55], 0, 360, fill=color, width=1)
+def fit_lines(draw, text, font, width, max_lines):
+    lines = wrap(draw, text, font, width)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        # trim last line with an ellipsis until it fits
+        while lines and draw.textlength(lines[-1] + " …", font=font) > width:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] = lines[-1] + " …"
+    return lines
 
 
-def icon_bars(d, x, y, color):
-    hs = [5, 11, 8]
-    for i, h in enumerate(hs):
-        bx = x + i * 6
-        d.rectangle([bx, y + 14 - h, bx + 4, y + 14], fill=color)
+# ---------------------------------------------------------------- visuals
+def draw_globe(draw, cx, cy, r):
+    """Cracked globe: circle, meridians, and a jagged crack."""
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255), width=3)
+    draw.ellipse([cx - r * 0.55, cy - r, cx + r * 0.55, cy + r],
+                 outline=(255, 255, 255), width=2)
+    draw.line([cx - r, cy, cx + r, cy], fill=(255, 255, 255), width=2)
+    draw.arc([cx - r, cy - r * 0.45, cx + r, cy + r * 0.45],
+             0, 360, fill=(255, 255, 255), width=2)
+    crack = [(cx - r * 0.15, cy - r * 0.95), (cx + r * 0.1, cy - r * 0.55),
+             (cx - r * 0.2, cy - r * 0.2), (cx + r * 0.25, cy + r * 0.15),
+             (cx - r * 0.05, cy + r * 0.5), (cx + r * 0.3, cy + r * 0.85)]
+    draw.line(crack, fill=(255, 176, 32), width=4, joint="curve")
+    # small "NO DEAL" tag under the globe
+    draw.rectangle([cx - r, cy + r + 8, cx + r, cy + r + 30],
+                   fill=(255, 176, 32))
+    draw.text((cx, cy + r + 19), "NO DEAL", font=F_CHART_L,
+              fill=(18, 18, 18), anchor="mm")
 
 
-def icon_ball(d, cx, cy, r, color):
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=2)
-    d.arc([cx - r, cy - r, cx + r, cy + r], 200, 340, fill=color, width=1)
-    d.arc([cx - r, cy - r, cx + r, cy + r], 20, 160, fill=color, width=1)
-    d.line([cx - r, cy, cx + r, cy], fill=color, width=1)
+def draw_bars(draw, x, y, w, values, lo, hi, color, unit=""):
+    """Small horizontal bar chart. values: [(label, number), ...]."""
+    row_h, label_w = 18, 34
+    for i, (label, val) in enumerate(values):
+        ry = y + i * row_h
+        draw.text((x, ry + 6), label, font=F_CHART_L, fill=MUTED, anchor="lm")
+        bx = x + label_w
+        bw = w - label_w - 44
+        frac = max(0.0, min(1.0, (val - lo) / (hi - lo)))
+        draw.rectangle([bx, ry, bx + bw, ry + 12], outline=RULE, width=1)
+        draw.rectangle([bx, ry, bx + int(bw * frac), ry + 12], fill=color)
+        draw.text((bx + bw + 4, ry + 6), f"{val:.1f}{unit}", font=F_CHART_V,
+                  fill=INK, anchor="lm")
+    return y + len(values) * row_h
 
 
-def icon_plane(d, x, y, color):
-    d.polygon([(x, y + 6), (x + 16, y), (x + 12, y + 8),
-               (x + 16, y + 13), (x + 8, y + 10), (x + 5, y + 14),
-               (x + 3, y + 10)], fill=color)
+# ---------------------------------------------------------------- sections
+def section_header(draw, x, y, w, color, name):
+    draw.rectangle([x, y, x + w, y + 28], fill=color)
+    draw.text((x + 10, y + 14), name, font=F_SEC, fill=(255, 255, 255),
+              anchor="lm")
+    return y + 28
 
 
-def draw_icon(d, kind, x, y, color):
-    if kind == "globe":
-        icon_globe(d, x + 8, y + 7, 8, color)
-    elif kind == "bars":
-        icon_bars(d, x, y, color)
-    elif kind == "ball":
-        icon_ball(d, x + 8, y + 7, 8, color)
-    elif kind == "plane":
-        icon_plane(d, x, y, color)
+def story_block(draw, x, y, w, num, st, color, chart_w=0):
+    """One numbered story. Returns height used."""
+    text_w = w - 30 - (chart_w + 10 if chart_w else 0)
+    draw.text((x + 2, y + 2), f"{num:02d}", font=F_NUM, fill=color)
+    head = fit_lines(draw, st["headline"], F_HEAD, text_w, 2)
+    hy = y
+    for ln in head:
+        draw.text((x + 30, hy), ln, font=F_HEAD, fill=INK)
+        hy += 17
+    det = fit_lines(draw, st["detail"], F_DET, text_w, 2)
+    for ln in det:
+        draw.text((x + 30, hy), ln, font=F_DET, fill=(60, 60, 60))
+        hy += 14
+    draw.text((x + 30, hy), st["source"], font=F_SRC, fill=MUTED)
+    hy += 13
+    block_h = hy - y
+    if "chart" in st:
+        ch = st["chart"]
+        unit = "%" if "REBOUND" in ch["label"] else ""
+        lo, hi = (0.0, 3.5) if unit else (50.0, 56.0)
+        cx = x + w - chart_w
+        draw.text((cx, y + 2), ch["label"], font=F_CHART_L, fill=MUTED)
+        draw_bars(draw, cx, y + 18, chart_w, ch["values"], lo, hi, color, unit)
+        block_h = max(block_h, 18 + len(ch["values"]) * 18 + 4)
+    if "score" in st:
+        sw = draw.textlength(st["score"], font=F_SCORE)
+        draw.text((x + w - sw, y + 2), st["score"], font=F_SCORE, fill=color)
+    draw.line([x, y + block_h + 4, x + w, y + block_h + 4], fill=(232, 232, 232))
+    return block_h + 6
 
 
-# ---------------------------------------------------------------- page
-def render():
-    img = Image.new("RGB", (W, H), PAPER)
+# ---------------------------------------------------------------- main
+def main():
+    here = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(here, "stories.json"), encoding="utf-8") as fh:
+        data = json.load(fh)
+
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR") or os.path.join(here, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "entry.png")
+
+    img = Image.new("RGB", (W, H), (255, 255, 255))
     d = ImageDraw.Draw(img)
 
-    # ---- masthead -------------------------------------------------
-    d.rectangle([0, 0, W, 92], fill=NAVY)
-    d.text((M, 10), DATA["title"], font=font("serif_bold", 52), fill=(255, 255, 255))
-    d.text((M, 70), DATA["subtitle"], font=font("regular", 15), fill=(200, 210, 225))
-    d.text((W - M, 70), "16 STORIES", font=font("bold", 15),
-           fill=(255, 210, 90), anchor="ra")
-    d.rectangle([0, 92, W, 97], fill=RED)
+    # ---- masthead
+    d.text((W // 2, 14), data["title"], font=F_TITLE, fill=INK, anchor="ma")
+    d.text((W // 2, 64), data["subtitle"], font=F_SUB, fill=MUTED, anchor="ma")
+    d.line([MARGIN, 84, W - MARGIN, 84], fill=INK, width=2)
 
-    # ---- lead panel ----------------------------------------------
-    ly, lh = 105, 112
-    d.rectangle([M, ly, W - M, ly + lh], fill=CARD, outline=FAINT, width=1)
-    d.rectangle([M, ly, M + 8, ly + lh], fill=RED)
-    tag = "  LEAD  •  CLIMATE  "
-    tf = font("bold", 13)
-    tw = text_w(tf, tag)
-    d.ellipse([M + 20, ly + 8, M + 44, ly + 32], fill=RED)
-    d.text((M + 32, ly + 20), "1", font=tf, fill=(255, 255, 255), anchor="mm")
-    d.rectangle([M + 52, ly + 10, M + 52 + tw + 8, ly + 30], fill=RED)
-    d.text((M + 56, ly + 11), tag, font=tf, fill=(255, 255, 255))
-    lead = DATA["lead"]
-    hx = M + 20
-    hw = 660
-    hf = fit_font("bold", 29, hw, lead["headline"], 20)
-    d.text((hx, ly + 36), lead["headline"], font=hf, fill=INK)
-    df = font("regular", 16)
-    for i, line in enumerate(wrap_lines(lead["detail"], df, hw)[:2]):
-        d.text((hx, ly + 70 + i * 20), line, font=df, fill=(40, 40, 40))
-    d.text((W - M - 8, ly + 11), lead["source"],
-           font=font("regular", 12), fill=GREY, anchor="ra")
-    # cracked-globe graphic on the right of the lead panel
-    gx, gy, gr = 848, ly + 60, 34
-    d.ellipse([gx - gr, gy - gr, gx + gr, gy + gr], outline=NAVY, width=4)
-    d.ellipse([gx - gr * 0.45, gy - gr, gx + gr * 0.45, gy + gr],
-              outline=NAVY, width=2)
-    d.line([gx - gr, gy, gx + gr, gy], fill=NAVY, width=2)
-    crack = [(gx - 6, gy - gr + 4), (gx + 8, gy - 18), (gx - 4, gy + 2),
-             (gx + 10, gy + 20), (gx - 2, gy + gr - 4)]
-    d.line(crack, fill=RED, width=4, joint="curve")
-    d.text((gx - 34, gy + gr + 2), "NO DEAL", font=font("bold", 12), fill=RED)
+    # ---- lead panel (COP31) with cracked-globe visual
+    lx, ly, lw, lh = MARGIN, 92, W - 2 * MARGIN, 132
+    d.rectangle([lx, ly, lx + lw, ly + lh], fill=(18, 59, 79))
+    draw_globe(d, lx + 78, ly + 56, 42)
+    lead = data["lead"]
+    tx = lx + 160
+    tw = lw - 180
+    lines = fit_lines(d, lead["headline"], F_LEAD_H, tw, 2)
+    hy = ly + 16
+    for ln in lines:
+        d.text((tx, hy), ln, font=F_LEAD_H, fill=(255, 255, 255))
+        hy += 30
+    for ln in fit_lines(d, lead["detail"], F_LEAD_D, tw, 2):
+        d.text((tx, hy), ln, font=F_LEAD_D, fill=(210, 225, 232))
+        hy += 18
+    d.text((tx, ly + lh - 16), lead["source"], font=F_LEAD_S,
+           fill=(255, 176, 32))
 
-    # ---- sections -------------------------------------------------
-    y = 225
-    n = 1  # lead story is #1; rows below are #2..#16
-    for sec in DATA["sections"]:
-        color = tuple(int(sec["color"][i:i + 2], 16) for i in (1, 3, 5))
-        d.rectangle([M, y, W - M, y + 24], fill=color)
-        draw_icon(d, sec["icon"], M + 8, y + 5, (255, 255, 255))
-        d.text((M + 30, y + 4), sec["name"], font=font("bold", 15),
-               fill=(255, 255, 255))
-        d.text((W - M - 8, y + 4), f"{len(sec['stories'])}",
-               font=font("bold", 15), fill=(255, 255, 255), anchor="ra")
-        y += 24
-        for st in sec["stories"]:
-            n += 1
-            tall = "chart" in st
-            rh = 64 if tall else 37
-            d.rectangle([M, y, W - M, y + rh], fill=CARD)
-            d.line([M, y + rh - 1, W - M, y + rh - 1], fill=FAINT, width=1)
-            # number chip
-            cy = y + rh // 2
-            d.ellipse([M + 4, cy - 12, M + 28, cy + 12], fill=color)
-            num = str(n)
-            nf = font("bold", 13)
-            d.text((M + 16, cy), num, font=nf, fill=(255, 255, 255),
-                   anchor="mm")
-            tx = M + 36
-            if tall:
-                twd = 700
-            elif "score" in st:
-                twd = 800
-            else:
-                twd = 820
-            draw_fit(d, (tx, y + 4), st["headline"], "bold", 17, twd, INK)
-            d.text((tx, y + 21 if not tall else y + 40), st["detail"],
-                   font=font("regular", 13), fill=(50, 50, 50))
-            if "score" in st:
-                sf = fit_font("bold", 20, 110, st["score"], 14)
-                d.text((W - M - 8, y + 5), st["score"], font=sf,
-                       fill=color, anchor="ra")
-                d.text((W - M - 8, y + 26), st["source"],
-                       font=font("regular", 10), fill=GREY, anchor="ra")
-            elif tall:
-                # mini bar chart: flash manufacturing PMI vs the 50 line
-                ch = st["chart"]
-                bx0, bw = 800, 128
-                d.text((bx0, y + 4), ch["label"], font=font("bold", 11),
-                       fill=GREY)
-                lo, hi = 48.0, 56.0
-                zero_x = bx0 + (50.0 - lo) / (hi - lo) * bw
-                for i, (lab, val) in enumerate(ch["values"]):
-                    by = y + 20 + i * 14
-                    d.text((bx0 - 34, by - 2), lab, font=font("bold", 11),
-                           fill=INK)
-                    d.rectangle([bx0, by, bx0 + bw, by + 8], fill=(225, 225, 225))
-                    d.rectangle([bx0, by, bx0 + (val - lo) / (hi - lo) * bw,
-                                 by + 8], fill=color)
-                    d.text((bx0 + bw + 5, by - 2), f"{val:.1f}",
-                           font=font("bold", 11), fill=INK)
-                d.line([zero_x, y + 18, zero_x, y + 18 + 3 * 14],
-                       fill=RED, width=1)
-            else:
-                d.text((W - M - 8, y + 5), st["source"],
-                       font=font("regular", 10), fill=GREY, anchor="ra")
-            y += rh
-        y += 6
+    # ---- body: WORLD left, ECONOMY + TECH right
+    body_y = 236
+    body_bottom = 806
+    col_gap = 16
+    left_w = 570
+    right_w = W - 2 * MARGIN - col_gap - left_w
+    lx0, rx0 = MARGIN, MARGIN + left_w + col_gap
 
-    # ---- date check ----------------------------------------------
-    dy = y + 2
-    d.rectangle([M, dy, W - M, dy + 66], fill=AMBER_BG,
-                outline=AMBER_EDGE, width=1)
-    d.polygon([(M + 10, dy + 22), (M + 20, dy + 8), (M + 30, dy + 22)],
-              fill=AMBER_EDGE)
-    d.text((M + 20, dy + 15), "!", font=font("bold", 13), fill=(255, 255, 255),
+    n = 1  # story counter (lead is story 01)
+    n += 1
+    eco_end = body_y
+    for sec in data["sections"]:
+        if sec["name"] == "WORLD":
+            y = section_header(d, lx0, body_y, left_w, sec["color"], sec["name"])
+            y += 4
+            for st in sec["stories"]:
+                y += story_block(d, lx0, y, left_w, n, st, sec["color"])
+                n += 1
+            assert y <= body_bottom + 2, f"WORLD overflows: {y}"
+        elif sec["name"] in ("ECONOMY", "TECH"):
+            start_y = body_y if sec["name"] == "ECONOMY" else eco_end + 10
+            y = section_header(d, rx0, start_y, right_w, sec["color"],
+                               sec["name"])
+            y += 4
+            for st in sec["stories"]:
+                cw = 168 if "chart" in st else 0
+                y += story_block(d, rx0, y, right_w, n, st, sec["color"],
+                                 chart_w=cw)
+                n += 1
+            if sec["name"] == "ECONOMY":
+                eco_end = y
+            assert y <= body_bottom + 2, f"{sec['name']} overflows: {y}"
+
+    # ---- SPORT: full-width band under the columns
+    sport = next(s for s in data["sections"] if s["name"] == "SPORT")
+    sy = body_bottom + 12
+    sy = section_header(d, MARGIN, sy, W - 2 * MARGIN, sport["color"], "SPORT")
+    sy += 6
+    cell_w = (W - 2 * MARGIN - 2 * col_gap) // 3
+    top = sy
+    for i, st in enumerate(sport["stories"]):
+        cx = MARGIN + i * (cell_w + col_gap)
+        if i:
+            d.line([cx - col_gap // 2, sy, cx - col_gap // 2, sy + 62],
+                   fill=RULE)
+        sw = d.textlength(st["score"], font=F_SCORE)
+        d.text((cx + cell_w - sw, sy), st["score"], font=F_SCORE,
+               fill=sport["color"])
+        for j, ln in enumerate(fit_lines(d, st["headline"], F_HEAD,
+                                         cell_w - int(sw) - 12, 2)):
+            d.text((cx, sy + j * 17), ln, font=F_HEAD, fill=INK)
+        for ln in fit_lines(d, st["detail"], F_DET, cell_w - 8, 1):
+            d.text((cx, sy + 38), ln, font=F_DET, fill=(60, 60, 60))
+        d.text((cx, sy + 54), st["source"], font=F_SRC, fill=MUTED)
+        n += 1
+    sport_bottom = sy + 68
+
+    # ---- DATE CHECK box
+    by = sport_bottom + 8
+    d.rectangle([MARGIN, by, W - MARGIN, by + 68], outline=(160, 90, 0), width=2)
+    d.text((MARGIN + 10, by + 6), "DATE CHECK — deliberately left out (not 23 Nov):",
+           font=F_DC_H, fill=(160, 90, 0))
+    dc = "  •  ".join(data["date_check"])
+    dy = by + 24
+    for ln in fit_lines(d, dc, F_DC, W - 2 * MARGIN - 20, 3):
+        d.text((MARGIN + 10, dy), ln, font=F_DC, fill=(70, 70, 70))
+        dy += 13
+
+    # ---- footer
+    d.line([MARGIN, H - 26, W - MARGIN, H - 26], fill=RULE)
+    d.text((W // 2, H - 14), data["footer"], font=F_FOOT, fill=MUTED,
            anchor="mm")
-    d.text((M + 38, dy + 7), "DATE CHECK — LEFT OUT ON PURPOSE (NOT 23 NOV)",
-           font=font("bold", 13), fill=(90, 60, 0))
-    items = "  •  ".join(DATA["date_check"])
-    df = font("regular", 12)
-    for i, line in enumerate(wrap_lines(items, df, W - 2 * M - 38 - 8)[:2]):
-        d.text((M + 38, dy + 26 + i * 16), line, font=df, fill=(70, 50, 0))
 
-    # ---- footer ----------------------------------------------------
-    d.text((W // 2, H - 18), DATA["footer"], font=font("regular", 12),
-           fill=GREY, anchor="mm")
-    return img
-
-
-def main():
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR")
-    if out_dir:
-        out = Path(out_dir)
-    else:
-        out = Path(__file__).resolve().parent / "output"
-    out.mkdir(parents=True, exist_ok=True)
-    img = render()
-    img.save(out / "entry.png", format="PNG", optimize=True)
+    assert n - 1 == 18, f"story count {n - 1} != 18"
+    img.save(out_path, format="PNG", optimize=True)
+    print(f"wrote {out_path} ({W}x{H}, {n - 1} stories)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
