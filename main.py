@@ -262,7 +262,7 @@ def main():
     d.text((W // 2, H - 14), data["footer"], font=F_FOOT, fill=MUTED,
            anchor="mm")
 
-    assert n - 1 == 18, f"story count {n - 1} != 18"
+    assert n - 1 == 17, f"story count {n - 1} != 17"
     img.save(out_path, format="PNG", optimize=True)
     print(f"wrote {out_path} ({W}x{H}, {n - 1} stories)")
     return 0
